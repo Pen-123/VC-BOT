@@ -133,12 +133,24 @@ async def stop_audio():
 # ---------- Main Runner ----------
 async def main():
     async with bot:
-        # Start the bot (logs in and connects to Discord)
-        await bot.start(TOKEN)
-        # Launch the web server in the same event loop
-        config = uvicorn.Config(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+        # Start the bot as a background task (non‑blocking)
+        bot_task = asyncio.create_task(bot.start(TOKEN))
+
+        # Run the web server in the same event loop
+        config = uvicorn.Config(
+            app,
+            host="0.0.0.0",
+            port=int(os.getenv("PORT", 8000))
+        )
         server = uvicorn.Server(config)
         await server.serve()
+
+        # On server shutdown, cancel the bot task gracefully
+        bot_task.cancel()
+        try:
+            await bot_task
+        except asyncio.CancelledError:
+            pass
 
 if __name__ == "__main__":
     asyncio.run(main())
