@@ -17,8 +17,8 @@ PORT = int(os.getenv("PORT", 8000))
 log = logging.getLogger("uvicorn")
 
 if not TOKEN:
-    log.critical("❌ DISCORD_TOKEN environment variable is not set!")
-    raise RuntimeError("DISCORD_TOKEN is missing")
+    log.critical("❌ DISCORD_TOKEN is missing")
+    raise RuntimeError("Missing token")
 else:
     masked = TOKEN[:6] + "..." + TOKEN[-4:] if len(TOKEN) > 10 else "***"
     log.info(f"🔑 Token loaded: {masked}")
@@ -30,20 +30,19 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Global state
 current_file: Path = Path("current.mp3")
 bot_ready = False
 bot_login_error: str | None = None
 
-# Voice reconnect data
-last_guild_id: int | None = None
-last_channel_id: int | None = None
+# Voice state – only stored when actually connected
+connected_guild_id: int | None = None
+connected_channel_id: int | None = None
 
 def get_voice_client() -> discord.VoiceClient | None:
-    """Return the bot's voice client for the last known guild, if connected."""
-    if last_guild_id is not None:
+    """Return the voice client for the current guild, if connected."""
+    if connected_guild_id is not None:
         for vc in bot.voice_clients:
-            if vc.guild.id == last_guild_id and vc.is_connected():
+            if vc.guild.id == connected_guild_id and vc.is_connected():
                 return vc
     return None
 
@@ -63,47 +62,77 @@ async def on_disconnect():
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    # If the bot itself left a voice channel unexpectedly, reconnect
-    if member == bot.user:
-        if before.channel and after.channel is None:
-            log.info(f"🔁 Bot left voice channel #{before.channel.name} – attempting reconnect")
-            # Reconnect if we have a stored channel
-            if last_channel_id and last_guild_id:
-                guild = bot.get_guild(last_guild_id)
-                if guild:
-                    channel = guild.get_channel(last_channel_id)
-                    if channel and isinstance(channel, discord.VoiceChannel):
+    # Only care about the bot itself
+    if member != bot.user:
+        return
+
+    global connected_guild_id, connected_channel_id
+
+    # True disconnection: bot was in a channel and now isn't, and no other channel joined
+    if before.channel is not None and after.channel is None:
+        log.info(f"🔁 Bot left #{before.channel.name}")
+
+        # Clear state
+        connected_guild_id = None
+        connected_channel_id = None
+
+        # If we have a stored last channel, try to reconnect (only once)
+        if before.channel.guild.id and before.channel.id:
+            guild = bot.get_guild(before.channel.guild.id)
+            if guild:
+                channel = guild.get_channel(before.channel.id)
+                if channel and isinstance(channel, discord.VoiceChannel):
+                    # Check that we aren't already connected (just in case)
+                    already = False
+                    for vc in bot.voice_clients:
+                        if vc.guild.id == guild.id and vc.is_connected():
+                            already = True
+                            break
+                    if not already:
                         try:
+                            await asyncio.sleep(0.5)  # tiny delay to avoid race
                             await channel.connect()
-                            log.info("🔁 Successfully reconnected")
+                            connected_guild_id = guild.id
+                            connected_channel_id = channel.id
+                            log.info("🔁 Reconnected successfully")
                         except Exception as e:
-                            log.error(f"❌ Failed to reconnect: {e}")
+                            log.error(f"❌ Reconnect failed: {e}")
+
+    # Bot moved to another channel (or joined after being disconnected)
+    elif after.channel is not None:
+        connected_guild_id = after.channel.guild.id
+        connected_channel_id = after.channel.id
+        log.info(f"📢 Bot is now in #{after.channel.name}")
 
 # ---------- FastAPI ----------
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-@app.get("/debug")
-async def debug():
+# ---------- Endpoints ----------
+@app.get("/voice")
+async def voice_status():
     vc = get_voice_client()
     return {
-        "token_set": bool(TOKEN),
-        "token_masked": masked,
+        "connected": vc is not None and vc.is_connected(),
+        "guild_id": connected_guild_id,
+        "channel_id": connected_channel_id,
+        "channel_name": vc.channel.name if vc and vc.channel else None
+    }
+
+@app.get("/debug")
+async def debug():
+    return {
+        "token_ok": bool(TOKEN),
         "bot_ready": bot_ready,
         "bot_user": str(bot.user) if bot_ready else None,
         "guild_count": len(bot.guilds) if bot_ready else 0,
-        "last_login_error": bot_login_error,
-        "voice_connected": vc is not None and vc.is_connected(),
-        "last_guild_id": last_guild_id,
-        "last_channel_id": last_channel_id,
+        "voice": await voice_status(),
+        "login_error": bot_login_error
     }
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "bot_ready": bot_ready
-    })
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/guilds")
 async def get_guilds():
@@ -120,9 +149,11 @@ async def get_voice_channels(guild_id: int):
 
 @app.post("/join")
 async def join_voice(data: dict):
-    global last_guild_id, last_channel_id
+    global connected_guild_id, connected_channel_id
+
     guild_id = int(data["guild_id"])
     channel_id = int(data["channel_id"])
+
     guild = bot.get_guild(guild_id)
     if not guild:
         raise HTTPException(status_code=404, detail="Guild not found")
@@ -130,15 +161,16 @@ async def join_voice(data: dict):
     if not isinstance(channel, discord.VoiceChannel):
         raise HTTPException(status_code=400, detail="Invalid voice channel")
 
-    # Disconnect from current VC (if any) in the same guild
+    # Disconnect from any existing VC in that guild
     for vc in bot.voice_clients:
         if vc.guild.id == guild_id:
             await vc.disconnect()
 
+    # Connect to the new channel
     try:
         await channel.connect()
-        last_guild_id = guild_id
-        last_channel_id = channel_id
+        connected_guild_id = guild_id
+        connected_channel_id = channel_id
         return {"status": "connected", "channel": channel.name}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -156,19 +188,7 @@ async def upload_mp3(file: UploadFile = File(...)):
 async def play_audio():
     vc = get_voice_client()
     if vc is None:
-        # Try to reconnect if we know where to go
-        if last_channel_id and last_guild_id:
-            guild = bot.get_guild(last_guild_id)
-            if guild:
-                channel = guild.get_channel(last_channel_id)
-                if channel:
-                    try:
-                        vc = await channel.connect()
-                    except Exception as e:
-                        raise HTTPException(status_code=400, detail=f"Not connected and rejoin failed: {e}")
-        if vc is None:
-            raise HTTPException(status_code=400, detail="Bot is not in a voice channel")
-
+        raise HTTPException(status_code=400, detail="Bot is not in a voice channel")
     if vc.is_playing():
         vc.stop()
     if not current_file.exists():
@@ -197,7 +217,6 @@ async def startup_event():
         except Exception as e:
             bot_login_error = str(e)
             log.error(f"❌ Bot error: {e}")
-
     asyncio.create_task(start_bot())
 
 @app.on_event("shutdown")
