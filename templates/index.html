@@ -1,356 +1,703 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Discord Bot Controller</title>
-    <style>
-        :root {
-            --bg: #1e1e2f;
-            --panel: #2a2a3d;
-            --accent: #5865f2;
-            --accent-hover: #4752c4;
-            --danger: #ed4245;
-            --danger-hover: #c93337;
-            --success: #57f287;
-            --text: #ffffff;
-            --text-secondary: #b0b0c0;
-            --border-radius: 8px;
-            --transition: 0.2s ease;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Inter', system-ui, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            padding: 1rem;
-        }
-        .dashboard {
-            width: 100%;
-            max-width: 500px;
-            background: var(--panel);
-            border-radius: 16px;
-            padding: 2rem;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.4);
-        }
-        h1 {
-            font-size: 1.6rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 1.5rem;
-        }
-        .status-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: var(--danger);
-            transition: background var(--transition);
-        }
-        .status-dot.online { background: var(--success); }
-        .section {
-            margin-bottom: 1.5rem;
-        }
-        label {
-            display: block;
-            font-size: 0.85rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: var(--text-secondary);
-            margin-bottom: 0.5rem;
-        }
-        select, button, .file-upload-btn {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            border-radius: var(--border-radius);
-            border: 1px solid #3a3a55;
-            background: #2f2f45;
-            color: var(--text);
-            font-size: 0.95rem;
-            transition: all var(--transition);
-            cursor: pointer;
-            appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23b0b0c0' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 1rem center;
-            background-size: 12px;
-        }
-        select:hover, .file-upload-btn:hover { border-color: var(--accent); }
-        button {
-            background: var(--accent);
-            border: none;
-            font-weight: 600;
-            letter-spacing: 0.3px;
-            background-image: none;
-            margin-top: 0.5rem;
-        }
-        button:hover { background: var(--accent-hover); }
-        button.danger { background: var(--danger); }
-        button.danger:hover { background: var(--danger-hover); }
-        .file-upload-area {
-            position: relative;
-            border: 2px dashed #3a3a55;
-            border-radius: var(--border-radius);
-            padding: 1.5rem;
-            text-align: center;
-            transition: border-color var(--transition);
-            cursor: pointer;
-        }
-        .file-upload-area:hover, .file-upload-area.dragover {
-            border-color: var(--accent);
-        }
-        .file-upload-area input[type="file"] {
-            position: absolute;
-            inset: 0;
-            opacity: 0;
-            cursor: pointer;
-        }
-        .file-name {
-            margin-top: 0.5rem;
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            word-break: break-all;
-        }
-        .status-message {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            margin-top: 0.5rem;
-            min-height: 1.2em;
-        }
-        .controls {
-            display: flex;
-            gap: 0.5rem;
-        }
-        .controls button { flex: 1; }
-        .divider {
-            border: none;
-            border-top: 1px solid #3a3a55;
-            margin: 1.5rem 0;
-        }
-        .voice-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.3rem;
-            background: rgba(87, 242, 135, 0.15);
-            color: var(--success);
-            padding: 0.3rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            margin-left: auto;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Discord Bot Controller</title>
+
+<style>
+:root {
+    --bg:#1e1e2f;
+    --panel:#2a2a3d;
+    --accent:#5865f2;
+    --danger:#ed4245;
+    --success:#57f287;
+    --text:#fff;
+    --secondary:#aaaabd;
+}
+
+* {
+    box-sizing:border-box;
+    margin:0;
+    padding:0;
+}
+
+body {
+    font-family:system-ui,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    padding:20px;
+}
+
+.dashboard {
+    width:100%;
+    max-width:500px;
+    background:var(--panel);
+    padding:30px;
+    border-radius:16px;
+}
+
+h1 {
+    margin-bottom:25px;
+}
+
+.status {
+    display:flex;
+    gap:10px;
+    align-items:center;
+    margin-bottom:20px;
+    padding:12px;
+    border-radius:8px;
+    background:#202033;
+}
+
+.dot {
+    width:10px;
+    height:10px;
+    border-radius:50%;
+    background:var(--danger);
+}
+
+.dot.online {
+    background:var(--success);
+}
+
+select,
+button {
+    width:100%;
+    padding:12px;
+    margin-top:8px;
+    border-radius:8px;
+    border:1px solid #44445b;
+    background:#303047;
+    color:white;
+    font-size:15px;
+}
+
+button {
+    background:var(--accent);
+    border:none;
+    cursor:pointer;
+    font-weight:600;
+}
+
+button:hover {
+    filter:brightness(.9);
+}
+
+button.danger {
+    background:var(--danger);
+}
+
+.section {
+    margin-bottom:20px;
+}
+
+label {
+    display:block;
+    color:var(--secondary);
+    font-size:13px;
+    font-weight:bold;
+    margin-bottom:6px;
+}
+
+.file-area {
+    border:2px dashed #44445b;
+    padding:20px;
+    text-align:center;
+    border-radius:8px;
+    position:relative;
+}
+
+.file-area input {
+    position:absolute;
+    inset:0;
+    opacity:0;
+    cursor:pointer;
+}
+
+.controls {
+    display:flex;
+    gap:8px;
+}
+
+.controls button {
+    flex:1;
+}
+
+.message {
+    color:var(--secondary);
+    margin-top:8px;
+    font-size:13px;
+    min-height:18px;
+}
+
+hr {
+    border:0;
+    border-top:1px solid #44445b;
+    margin:25px 0;
+}
+</style>
 </head>
+
 <body>
-    <div class="dashboard">
-        <h1>
-            🎵 Bot Panel
-            <span id="voiceBadge" class="voice-badge" style="display:none;">
-                <span class="status-dot online" style="width:8px;height:8px;"></span>
-                <span id="voiceChannelName"></span>
-            </span>
-        </h1>
 
-        <div class="section">
-            <label>Server</label>
-            <select id="guildSelect" onchange="loadChannels()">
-                <option value="">-- Select a server --</option>
-            </select>
-        </div>
+<div class="dashboard">
 
-        <div class="section">
-            <label>Voice Channel</label>
-            <select id="channelSelect">
-                <option value="">-- First select a server --</option>
-            </select>
-            <button onclick="joinVC()">📞 Join Voice Channel</button>
-            <div id="joinStatus" class="status-message"></div>
-        </div>
+<h1>🎵 Bot Panel</h1>
 
-        <hr class="divider">
+<div class="status">
 
-        <div class="section">
-            <label>Upload MP3</label>
-            <div class="file-upload-area" id="dropArea">
-                <span>📁 Drag & drop or click to browse</span>
-                <input type="file" id="mp3File" accept=".mp3" onchange="handleFileSelect(this.files)">
-                <div class="file-name" id="fileName"></div>
-            </div>
-            <button onclick="uploadMP3()" style="margin-top:0.5rem;">📤 Upload</button>
-            <div id="uploadStatus" class="status-message"></div>
-        </div>
+    <span id="botDot" class="dot"></span>
 
-        <div class="controls">
-            <button onclick="playAudio()">▶️ Play</button>
-            <button class="danger" onclick="stopAudio()">⏹️ Stop</button>
-        </div>
-        <div id="playStatus" class="status-message"></div>
-    </div>
+    <span id="botStatus">
+        Connecting to Discord...
+    </span>
 
-    <script>
-        const API = "";
+</div>
 
-        // Auto-refresh bot & voice status every 5 seconds
-        async function refreshStatus() {
-            try {
-                const res = await fetch(API + "/voice");
-                const data = await res.json();
-                const badge = document.getElementById("voiceBadge");
-                const nameEl = document.getElementById("voiceChannelName");
-                if (data.connected) {
-                    badge.style.display = "inline-flex";
-                    nameEl.textContent = data.channel_name || "Voice";
-                    document.getElementById("joinStatus").textContent = `Connected to #${data.channel_name || "Voice"}`;
-                } else {
-                    badge.style.display = "none";
-                    if (document.getElementById("channelSelect").value) {
-                        document.getElementById("joinStatus").textContent = "Not connected";
-                    }
+<div class="status">
+
+    <span id="voiceDot" class="dot"></span>
+
+    <span id="voiceStatus">
+        Not in voice
+    </span>
+
+</div>
+
+
+<div class="section">
+
+<label>SERVER</label>
+
+<select id="guildSelect"
+        onchange="loadChannels()">
+
+<option value="">
+Loading servers...
+</option>
+
+</select>
+
+</div>
+
+
+<div class="section">
+
+<label>VOICE CHANNEL</label>
+
+<select id="channelSelect">
+
+<option value="">
+Select a server first
+</option>
+
+</select>
+
+<button onclick="joinVC()">
+📞 Join Voice Channel
+</button>
+
+<div id="joinStatus"
+     class="message">
+</div>
+
+</div>
+
+
+<hr>
+
+
+<div class="section">
+
+<label>MP3 FILE</label>
+
+<div class="file-area">
+
+📁 Click or drag an MP3 here
+
+<input
+    type="file"
+    id="mp3File"
+    accept=".mp3"
+    onchange="handleFile(this.files)"
+>
+
+</div>
+
+<div id="fileName"
+     class="message">
+</div>
+
+<button onclick="uploadMP3()">
+📤 Upload
+</button>
+
+<div id="uploadStatus"
+     class="message">
+</div>
+
+</div>
+
+
+<div class="controls">
+
+<button onclick="playAudio()">
+▶️ Play
+</button>
+
+<button class="danger"
+        onclick="stopAudio()">
+⏹️ Stop
+</button>
+
+</div>
+
+<div id="playStatus"
+     class="message">
+</div>
+
+</div>
+
+
+<script>
+
+const API = "";
+
+
+async function refreshStatus() {
+
+    try {
+
+        const res =
+            await fetch(API + "/status");
+
+        if (!res.ok)
+            throw new Error();
+
+        const data =
+            await res.json();
+
+
+        // Discord status
+
+        const botDot =
+            document.getElementById("botDot");
+
+        const botStatus =
+            document.getElementById("botStatus");
+
+
+        if (data.bot_connected) {
+
+            botDot.classList.add("online");
+
+            botStatus.textContent =
+                "Discord connected";
+
+        } else {
+
+            botDot.classList.remove("online");
+
+            botStatus.textContent =
+                "Discord disconnected";
+        }
+
+
+        // Voice status
+
+        const voiceDot =
+            document.getElementById("voiceDot");
+
+        const voiceStatus =
+            document.getElementById("voiceStatus");
+
+
+        if (data.voice_connected) {
+
+            voiceDot.classList.add("online");
+
+            voiceStatus.textContent =
+                "Connected to #" +
+                (data.channel_name || "Voice");
+
+        } else {
+
+            voiceDot.classList.remove("online");
+
+            voiceStatus.textContent =
+                "Not in voice";
+        }
+
+    } catch (e) {
+
+        document.getElementById("botDot")
+            .classList.remove("online");
+
+        document.getElementById("botStatus")
+            .textContent =
+            "Server unavailable";
+    }
+}
+
+
+async function loadGuilds() {
+
+    const select =
+        document.getElementById("guildSelect");
+
+    try {
+
+        const res =
+            await fetch(API + "/guilds");
+
+        if (!res.ok)
+            throw new Error();
+
+        const guilds =
+            await res.json();
+
+
+        select.innerHTML =
+            '<option value="">-- Select server --</option>';
+
+
+        for (const guild of guilds) {
+
+            const option =
+                document.createElement("option");
+
+            option.value = guild.id;
+
+            option.textContent =
+                guild.name;
+
+            select.appendChild(option);
+        }
+
+    } catch (e) {
+
+        select.innerHTML =
+            '<option value="">Discord still connecting...</option>';
+    }
+}
+
+
+async function loadChannels() {
+
+    const guildId =
+        document.getElementById("guildSelect").value;
+
+    const select =
+        document.getElementById("channelSelect");
+
+
+    if (!guildId) {
+
+        select.innerHTML =
+            '<option value="">Select a server first</option>';
+
+        return;
+    }
+
+
+    try {
+
+        const res =
+            await fetch(
+                API + "/channels/" + guildId
+            );
+
+        if (!res.ok)
+            throw new Error();
+
+        const channels =
+            await res.json();
+
+
+        select.innerHTML =
+            '<option value="">-- Select voice channel --</option>';
+
+
+        for (const channel of channels) {
+
+            const option =
+                document.createElement("option");
+
+            option.value =
+                channel.id;
+
+            option.textContent =
+                "# " + channel.name;
+
+            select.appendChild(option);
+        }
+
+    } catch (e) {
+
+        select.innerHTML =
+            '<option value="">Failed to load channels</option>';
+    }
+}
+
+
+async function joinVC() {
+
+    const guildId =
+        document.getElementById("guildSelect").value;
+
+    const channelId =
+        document.getElementById("channelSelect").value;
+
+    const status =
+        document.getElementById("joinStatus");
+
+
+    if (!guildId || !channelId) {
+
+        status.textContent =
+            "Select a server and voice channel first.";
+
+        return;
+    }
+
+
+    status.textContent =
+        "Connecting...";
+
+
+    try {
+
+        const res =
+            await fetch(
+                API + "/join",
+                {
+                    method:"POST",
+                    headers:{
+                        "Content-Type":
+                        "application/json"
+                    },
+                    body:JSON.stringify({
+                        guild_id:guildId,
+                        channel_id:channelId
+                    })
                 }
-            } catch(e) {}
+            );
+
+
+        const data =
+            await res.json();
+
+
+        if (!res.ok) {
+
+            status.textContent =
+                "❌ " +
+                (data.detail || "Failed");
+
+            return;
         }
 
-        // Load guilds on page load
-        async function loadGuilds() {
-            const sel = document.getElementById("guildSelect");
-            try {
-                const res = await fetch(API + "/guilds");
-                if (!res.ok) throw new Error("Bot offline");
-                const guilds = await res.json();
-                sel.innerHTML = '<option value="">-- Select a server --</option>';
-                guilds.forEach(g => {
-                    sel.innerHTML += `<option value="${g.id}">${g.name}</option>`;
-                });
-            } catch(e) {
-                sel.innerHTML = '<option value="">⚠️ Bot is offline</option>';
-            }
-        }
 
-        async function loadChannels() {
-            const guildId = document.getElementById("guildSelect").value;
-            const sel = document.getElementById("channelSelect");
-            if (!guildId) {
-                sel.innerHTML = '<option value="">-- First select a server --</option>';
-                return;
-            }
-            try {
-                const res = await fetch(`${API}/channels/${guildId}`);
-                const channels = await res.json();
-                sel.innerHTML = '<option value="">-- Select a voice channel --</option>';
-                channels.forEach(c => {
-                    sel.innerHTML += `<option value="${c.id}"># ${c.name}</option>`;
-                });
-            } catch(e) {
-                sel.innerHTML = '<option value="">Error loading channels</option>';
-            }
-        }
+        status.textContent =
+            "✅ Connected to #" +
+            data.channel;
 
-        async function joinVC() {
-            const guildId = document.getElementById("guildSelect").value;
-            const channelId = document.getElementById("channelSelect").value;
-            if (!guildId || !channelId) return alert("Please select both a server and a voice channel.");
-            const statusEl = document.getElementById("joinStatus");
-            statusEl.textContent = "Joining...";
-            try {
-                const res = await fetch(API + "/join", {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({guild_id: guildId, channel_id: channelId})
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    statusEl.textContent = `✅ Connected to #${data.channel}`;
-                    refreshStatus(); // update badge immediately
-                } else {
-                    statusEl.textContent = `❌ ${data.detail}`;
+
+        await refreshStatus();
+
+    } catch (e) {
+
+        status.textContent =
+            "❌ Network error";
+    }
+}
+
+
+function handleFile(files) {
+
+    if (!files.length)
+        return;
+
+    document.getElementById("fileName")
+        .textContent =
+        files[0].name;
+}
+
+
+async function uploadMP3() {
+
+    const file =
+        document.getElementById("mp3File")
+        .files[0];
+
+    const status =
+        document.getElementById("uploadStatus");
+
+
+    if (!file) {
+
+        status.textContent =
+            "Select an MP3 first.";
+
+        return;
+    }
+
+
+    status.textContent =
+        "Uploading...";
+
+
+    const form =
+        new FormData();
+
+    form.append("file", file);
+
+
+    try {
+
+        const res =
+            await fetch(
+                API + "/upload",
+                {
+                    method:"POST",
+                    body:form
                 }
-            } catch(e) {
-                statusEl.textContent = "❌ Network error";
-            }
+            );
+
+
+        const data =
+            await res.json();
+
+
+        if (!res.ok) {
+
+            status.textContent =
+                "❌ " +
+                (data.detail || "Upload failed");
+
+            return;
         }
 
-        function handleFileSelect(files) {
-            if (files.length > 0) {
-                document.getElementById("fileName").textContent = files[0].name;
-            }
-        }
 
-        async function uploadMP3() {
-            const fileInput = document.getElementById("mp3File");
-            const file = fileInput.files[0];
-            const statusEl = document.getElementById("uploadStatus");
-            if (!file) {
-                statusEl.textContent = "Please select an MP3 file first.";
-                return;
-            }
-            statusEl.textContent = "Uploading...";
-            const form = new FormData();
-            form.append("file", file);
-            try {
-                const res = await fetch(API + "/upload", {method: "POST", body: form});
-                const data = await res.json();
-                if (res.ok) {
-                    statusEl.textContent = `✅ ${data.filename} uploaded (${(data.size/1024).toFixed(1)} KB)`;
-                } else {
-                    statusEl.textContent = `❌ ${data.detail}`;
+        status.textContent =
+            `✅ ${data.filename} uploaded`;
+
+    } catch (e) {
+
+        status.textContent =
+            "❌ Upload failed";
+    }
+}
+
+
+async function playAudio() {
+
+    const status =
+        document.getElementById("playStatus");
+
+    status.textContent =
+        "Starting...";
+
+
+    try {
+
+        const res =
+            await fetch(
+                API + "/play",
+                {
+                    method:"POST"
                 }
-            } catch(e) {
-                statusEl.textContent = "Upload failed";
-            }
+            );
+
+
+        const data =
+            await res.json();
+
+
+        if (!res.ok) {
+
+            status.textContent =
+                "❌ " +
+                (data.detail || "Playback failed");
+
+            return;
         }
 
-        async function playAudio() {
-            const statusEl = document.getElementById("playStatus");
-            statusEl.textContent = "Starting...";
-            try {
-                const res = await fetch(API + "/play", {method: "POST"});
-                const data = await res.json();
-                if (res.ok) {
-                    statusEl.textContent = "▶️ Playing";
-                } else {
-                    statusEl.textContent = `❌ ${data.detail}`;
+
+        status.textContent =
+            "▶️ Playing";
+
+    } catch (e) {
+
+        status.textContent =
+            "❌ Request failed";
+    }
+}
+
+
+async function stopAudio() {
+
+    const status =
+        document.getElementById("playStatus");
+
+
+    try {
+
+        const res =
+            await fetch(
+                API + "/stop",
+                {
+                    method:"POST"
                 }
-            } catch(e) {
-                statusEl.textContent = "❌ Request failed";
-            }
-        }
+            );
 
-        async function stopAudio() {
-            const statusEl = document.getElementById("playStatus");
-            try {
-                await fetch(API + "/stop", {method: "POST"});
-                statusEl.textContent = "⏹️ Stopped";
-            } catch(e) {
-                statusEl.textContent = "Stop request failed";
-            }
-        }
 
-        // Drag & drop support
-        const dropArea = document.getElementById("dropArea");
-        dropArea.addEventListener("dragover", (e) => {
-            e.preventDefault();
-            dropArea.classList.add("dragover");
-        });
-        dropArea.addEventListener("dragleave", () => dropArea.classList.remove("dragover"));
-        dropArea.addEventListener("drop", (e) => {
-            e.preventDefault();
-            dropArea.classList.remove("dragover");
-            const files = e.dataTransfer.files;
-            if (files.length) {
-                document.getElementById("mp3File").files = files;
-                handleFileSelect(files);
-            }
-        });
+        if (res.ok)
+            status.textContent =
+                "⏹️ Stopped";
 
-        // Initial load & periodic status refresh
-        loadGuilds();
-        refreshStatus();
-        setInterval(refreshStatus, 5000);
-    </script>
+        else
+            status.textContent =
+                "❌ Stop failed";
+
+    } catch (e) {
+
+        status.textContent =
+            "❌ Request failed";
+    }
+}
+
+
+// Initial
+
+refreshStatus();
+loadGuilds();
+
+
+// Keep UI updated
+
+setInterval(refreshStatus, 3000);
+
+setInterval(async () => {
+
+    const current =
+        document.getElementById("guildSelect").value;
+
+    if (current)
+        return;
+
+    await loadGuilds();
+
+}, 5000);
+
+</script>
+
 </body>
 </html>
