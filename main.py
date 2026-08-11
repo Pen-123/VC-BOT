@@ -1,19 +1,30 @@
 import os
 import asyncio
+import logging
 import traceback
 import discord
 from discord.ext import commands
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-import uvicorn
 import aiofiles
 from pathlib import Path
 
 # ---------- Config ----------
 TOKEN = os.getenv("DISCORD_TOKEN")
+PORT = int(os.getenv("PORT", 8000))
+
+# ---------- Logging (Uvicorn's logger, guaranteed to appear in Railway logs) ----------
+log = logging.getLogger("uvicorn")
+
+# ---------- Validate token early ----------
 if not TOKEN:
-    raise RuntimeError("DISCORD_TOKEN environment variable not set")
+    log.critical("❌ DISCORD_TOKEN environment variable is not set!")
+    raise RuntimeError("DISCORD_TOKEN environment variable is not set")
+else:
+    # Show a masked version of the token for debugging
+    masked = TOKEN[:6] + "..." + TOKEN[-4:] if len(TOKEN) > 10 else "***"
+    log.info(f"🔑 Token loaded (masked): {masked}")
 
 # ---------- Bot Setup ----------
 intents = discord.Intents.default()
@@ -22,38 +33,48 @@ intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Global state for the web interface
+# Global state
 current_vc: discord.VoiceClient | None = None
 current_file: Path = Path("current.mp3")
-bot_ready = False  # Track if the bot successfully logged in
-
-# ---------- FastAPI Setup ----------
-app = FastAPI()
-templates = Jinja2Templates(directory="templates")
+bot_ready = False
+bot_login_error: str | None = None          # Store last login error
 
 # ---------- Bot Events ----------
 @bot.event
 async def on_ready():
-    global bot_ready
+    global bot_ready, bot_login_error
     bot_ready = True
-    print(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
+    bot_login_error = None
+    log.info(f"✅ Logged in as {bot.user} (ID: {bot.user.id})")
+    log.info(f"   Connected to {len(bot.guilds)} guild(s)")
 
 @bot.event
 async def on_disconnect():
     global bot_ready
     bot_ready = False
-    print("⚠️  Bot disconnected")
+    log.warning("⚠️  Bot disconnected from Discord")
+
+# ---------- FastAPI Setup ----------
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
 
 # ---------- API Endpoints ----------
 
-@app.get("/status")
-async def status():
-    """Check if the bot is online."""
-    return {"online": bot_ready, "guilds": len(bot.guilds) if bot_ready else 0}
+@app.get("/debug")
+async def debug_info():
+    """Return detailed status for troubleshooting."""
+    return {
+        "token_set": bool(TOKEN),
+        "token_masked": (TOKEN[:6] + "..." + TOKEN[-4:]) if TOKEN and len(TOKEN) > 10 else "***",
+        "bot_ready": bot_ready,
+        "bot_user": str(bot.user) if bot_ready else None,
+        "guild_count": len(bot.guilds) if bot_ready else 0,
+        "last_login_error": bot_login_error,
+        "voice_connected": current_vc is not None and current_vc.is_connected()
+    }
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    """Serve the control panel (with optional warning)."""
     return templates.TemplateResponse("index.html", {
         "request": request,
         "bot_ready": bot_ready
@@ -61,13 +82,12 @@ async def dashboard(request: Request):
 
 @app.get("/guilds")
 async def get_guilds():
-    """Return all guilds the bot is in."""
     if not bot_ready:
-        raise HTTPException(status_code=503, detail="Bot is not connected yet")
-    guilds = [
-        {"id": str(g.id), "name": g.name}
-        for g in bot.guilds
-    ]
+        detail = "Bot is not connected to Discord"
+        if bot_login_error:
+            detail += f": {bot_login_error}"
+        raise HTTPException(status_code=503, detail=detail)
+    guilds = [{"id": str(g.id), "name": g.name} for g in bot.guilds]
     return JSONResponse(guilds)
 
 @app.get("/channels/{guild_id}")
@@ -77,10 +97,7 @@ async def get_voice_channels(guild_id: int):
     guild = bot.get_guild(guild_id)
     if not guild:
         raise HTTPException(status_code=404, detail="Guild not found")
-    channels = [
-        {"id": str(c.id), "name": c.name}
-        for c in guild.voice_channels
-    ]
+    channels = [{"id": str(c.id), "name": c.name} for c in guild.voice_channels]
     return JSONResponse(channels)
 
 @app.post("/join")
@@ -133,28 +150,37 @@ async def stop_audio():
         current_vc.stop()
     return {"status": "stopped"}
 
-# ---------- Main Runner ----------
-async def main():
-    async with bot:
-        async def run_bot():
-            try:
-                await bot.start(TOKEN)
-            except Exception as e:
-                print("❌ Bot failed to start:")
-                traceback.print_exc()
-                raise  # re-raise so the task doesn't hang silently
+# ---------- Startup / Shutdown ----------
+@app.on_event("startup")
+async def startup_event():
+    global bot_login_error
 
-        bot_task = asyncio.create_task(run_bot())
-
-        config = uvicorn.Config(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
-        server = uvicorn.Server(config)
-        await server.serve()
-
-        bot_task.cancel()
+    async def start_bot():
+        global bot_ready, bot_login_error
         try:
-            await bot_task
-        except asyncio.CancelledError:
-            pass
+            log.info("🚀 Starting bot...")
+            await bot.start(TOKEN)
+        except discord.LoginFailure:
+            bot_login_error = "Invalid bot token. Check DISCORD_TOKEN in Railway variables."
+            log.error("❌ " + bot_login_error)
+        except Exception as e:
+            bot_login_error = f"Unexpected error: {str(e)}"
+            log.error(f"❌ Bot failed to start: {e}\n{traceback.format_exc()}")
+        else:
+            # If bot.start() returns (which it normally shouldn't), we still log
+            log.warning("⚠️  Bot stopped unexpectedly.")
+            bot_ready = False
 
+    # Launch the bot as a background task
+    asyncio.create_task(start_bot())
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    log.info("🛑 Shutting down bot...")
+    await bot.close()
+    log.info("🛑 Bot shut down.")
+
+# ---------- Main (for local dev only) ----------
 if __name__ == "__main__":
-    asyncio.run(main())
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
