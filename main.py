@@ -4,7 +4,6 @@ import discord
 from discord.ext import commands
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
 import aiofiles
@@ -18,7 +17,7 @@ if not TOKEN:
 # ---------- Bot Setup ----------
 intents = discord.Intents.default()
 intents.guilds = True
-intents.voice_states = True  # needed to know voice channels
+intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -34,10 +33,6 @@ templates = Jinja2Templates(directory="templates")
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
-    # Optional: auto-join a default VC on startup (you can omit this)
-    # default_guild_id = int(os.getenv("DEFAULT_GUILD", 0))
-    # default_channel_id = int(os.getenv("DEFAULT_CHANNEL", 0))
-    # ...
 
 # ---------- API Endpoints ----------
 
@@ -137,8 +132,9 @@ async def stop_audio():
 
 # ---------- Main Runner ----------
 async def main():
-    # Start the bot in the background
     async with bot:
+        # Start the bot (logs in and connects to Discord)
+        await bot.start(TOKEN)
         # Launch the web server in the same event loop
         config = uvicorn.Config(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
         server = uvicorn.Server(config)
